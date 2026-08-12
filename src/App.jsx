@@ -1,122 +1,88 @@
-import { useState } from 'react'
-import reactLogo from './assets/react.svg'
-import viteLogo from './assets/vite.svg'
-import heroImg from './assets/hero.png'
-import './App.css'
+import React, { useState } from 'react';
+import { Layout, Menu, theme } from 'antd';
+import { 
+  ShoppingOutlined, 
+  ShopOutlined, 
+  UserOutlined, 
+  ImportOutlined, 
+  ExportOutlined 
+} from '@ant-design/icons';
+import ProductList from './pages/ProductList';
+import SupplierList from './pages/SupplierList';
+import CustomerList from './pages/CustomerList';
+import PurchaseOrderList from './pages/PurchaseOrderList';
+import SaleOrderList from './pages/SaleOrderList'; // 👈 匯入銷貨模組
 
-function App() {
-  const [count, setCount] = useState(0)
+const { Header, Content, Sider } = Layout;
+
+const App = () => {
+  const [selectedKey, setSelectedKey] = useState('1');
+  const {
+    token: { colorBgContainer, borderRadiusLG },
+  } = theme.useToken();
+
+  const menuItems = [
+    { key: '1', icon: <ShoppingOutlined />, label: '商品與三軌成本控管' },
+    { key: '2', icon: <ShopOutlined />, label: '廠商資料管理' },
+    { key: '3', icon: <UserOutlined />, label: '客戶資料管理' },
+    { key: '4', icon: <ImportOutlined />, label: '進貨單管理' },
+    { key: '5', icon: <ExportOutlined />, label: '門市 POS 銷貨單' },
+  ];
 
   return (
-    <>
-      <section id="center">
-        <div className="hero">
-          <img src={heroImg} className="base" width="170" height="179" alt="" />
-          <img src={reactLogo} className="framework" alt="React logo" />
-          <img src={viteLogo} className="vite" alt="Vite logo" />
+    <Layout style={{ minHeight: '100vh' }}>
+      <Sider breakpoint="lg" collapsedWidth="0">
+        <div style={{ 
+          height: 32, 
+          margin: 16, 
+          background: 'rgba(255, 255, 255, 0.2)', 
+          borderRadius: 6,
+          color: '#fff',
+          textAlign: 'center',
+          lineHeight: '32px',
+          fontWeight: 'bold'
+        }}>
+          🛠️ 奇家五金 ERP
         </div>
-        <div>
-          <h1>Get started</h1>
-          <p>
-            Edit <code>src/App.jsx</code> and save to test <code>HMR</code>
-          </p>
-        </div>
-        <button
-          type="button"
-          className="counter"
-          onClick={() => setCount((count) => count + 1)}
-        >
-          Count is {count}
-        </button>
-      </section>
+        <Menu 
+          theme="dark" 
+          mode="inline" 
+          selectedKeys={[selectedKey]}
+          onClick={(e) => setSelectedKey(e.key)}
+          items={menuItems} 
+        />
+      </Sider>
 
-      <div className="ticks"></div>
+      <Layout>
+        <Header style={{ 
+          padding: '0 24px', 
+          background: colorBgContainer, 
+          display: 'flex', 
+          alignItems: 'center', 
+          justifyContent: 'space-between',
+          borderBottom: '1px solid #f0f0f0'
+        }}>
+          <h2 style={{ margin: 0, fontSize: '18px', color: '#1677ff' }}>奇家五金商行 - 全端進銷存管理系統</h2>
+          <span style={{ color: '#8c8c8c' }}>登入者：系統管理者 (Admin)</span>
+        </Header>
 
-      <section id="next-steps">
-        <div id="docs">
-          <svg className="icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#documentation-icon"></use>
-          </svg>
-          <h2>Documentation</h2>
-          <p>Your questions, answered</p>
-          <ul>
-            <li>
-              <a href="https://vite.dev/" target="_blank">
-                <img className="logo" src={viteLogo} alt="" />
-                Explore Vite
-              </a>
-            </li>
-            <li>
-              <a href="https://react.dev/" target="_blank">
-                <img className="button-icon" src={reactLogo} alt="" />
-                Learn more
-              </a>
-            </li>
-          </ul>
-        </div>
-        <div id="social">
-          <svg className="icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#social-icon"></use>
-          </svg>
-          <h2>Connect with us</h2>
-          <p>Join the Vite community</p>
-          <ul>
-            <li>
-              <a href="https://github.com/vitejs/vite" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#github-icon"></use>
-                </svg>
-                GitHub
-              </a>
-            </li>
-            <li>
-              <a href="https://chat.vite.dev/" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#discord-icon"></use>
-                </svg>
-                Discord
-              </a>
-            </li>
-            <li>
-              <a href="https://x.com/vite_js" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#x-icon"></use>
-                </svg>
-                X.com
-              </a>
-            </li>
-            <li>
-              <a href="https://bsky.app/profile/vite.dev" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#bluesky-icon"></use>
-                </svg>
-                Bluesky
-              </a>
-            </li>
-          </ul>
-        </div>
-      </section>
+        <Content style={{ margin: '16px' }}>
+          <div style={{ 
+            padding: 12, 
+            minHeight: 360, 
+            background: colorBgContainer, 
+            borderRadius: borderRadiusLG 
+          }}>
+            {selectedKey === '1' && <ProductList />}
+            {selectedKey === '2' && <SupplierList />}
+            {selectedKey === '3' && <CustomerList />}
+            {selectedKey === '4' && <PurchaseOrderList />}
+            {selectedKey === '5' && <SaleOrderList />} {/* 👈 5 大模組全數上線 */}
+          </div>
+        </Content>
+      </Layout>
+    </Layout>
+  );
+};
 
-      <div className="ticks"></div>
-      <section id="spacer"></section>
-    </>
-  )
-}
-
-export default App
+export default App;

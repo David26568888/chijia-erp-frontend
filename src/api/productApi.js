@@ -1,4 +1,4 @@
-import axious from './axiosInstance';
+import axiosInstance from './axiosInstance';
 
 export const productApi = {
     //1. 查詢所有商品
@@ -26,10 +26,15 @@ export const productApi = {
         return axiosInstance.patch('/products/${id}/toggle-status');
     },
 
-    //6.依品名規格模糊搜尋(櫃台快搜)
-    searchProductsByName:(name)=>{
-        return axiosInstance.get('/products/search?name=${name}');
+  
+    // 6. 依品名規格模糊搜尋 (櫃檯快搜)
+    searchProductByName: (name) => {
+        return axiosInstance.get('/products/search', { params: { name } });  //實務比較多用這寫法
     },
+    //6.依品名規格模糊搜尋(櫃台快搜)
+    // searchProductsByName:(name)=>{
+    //     return axiosInstance.get('/products/search?name=${name}');
+    // },
 
     //7.依條碼(Barcode)查詢(櫃檯掃描槍專用)
     getProductByBarcode:(barcode)=>{
@@ -45,5 +50,10 @@ export const productApi = {
     importProductsExcel:(file)=>{
         const formData = new FormData();
         formData.append('file',file);
-        return axiosInstance.post('/products/import');
+        return axiosInstance.post('/products/import',formData,{
+            headers:{
+                'Content-Type':'multipart/form-data',
+            },
+        });
     },
+};
