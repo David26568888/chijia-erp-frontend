@@ -55,12 +55,12 @@ body {
 }
 
 #root {
-  width: 1126px;
-  max-width: 100%;
-  margin: 0 auto;
-  text-align: center;
-  border-inline: 1px solid var(--border);
-  min-height: 100svh;
+  width: 100%;          /* 💡 改為 100% 佔滿 */
+  max-width: 100%;      /* 💡 取消限制最大寬度 */
+  margin: 0;            /* 💡 取消自動置中間距 */
+  padding: 0;
+  text-align: left;     /* 進銷存系統靠左對齊較符合習慣 */
+  min-height: 100vh;
   display: flex;
   flex-direction: column;
   box-sizing: border-box;
