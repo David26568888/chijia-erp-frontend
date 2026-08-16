@@ -7,7 +7,8 @@ import {
   UserOutlined, 
   ImportOutlined, 
   ShoppingCartOutlined, 
-  SafetyCertificateOutlined 
+  SafetyCertificateOutlined,
+  BarChartOutlined// 💡 新增報表圖示
 } from '@ant-design/icons';
 import zhTW from 'antd/locale/zh_TW';
 
@@ -16,6 +17,7 @@ import SupplierList from './pages/SupplierList';
 import CustomerList from './pages/CustomerList';
 import PurchaseOrderList from './pages/PurchaseOrderList';
 import SaleOrderList from './pages/SaleOrderList';
+import FinanceReport from './pages/FinanceReport'; // 💡 匯入財務報表頁面
 import BackupRestore from './pages/BackupRestore';
 
 const { Header, Sider, Content } = Layout;
@@ -49,6 +51,11 @@ const MainLayout = () => {
       key: '/sale-orders',
       icon: <ShoppingCartOutlined />,
       label: <Link to="/sale-orders">門市 POS 銷貨單</Link>,
+    },
+    {
+      key: '/finance-report',
+      icon: <BarChartOutlined style={{ color: '#1677ff' }} />,
+      label: <Link to="/finance-report">📈 財務與毛利報表</Link>, // 💡 新增財務報表選單
     },
     {
       key: '/backup',
@@ -90,6 +97,7 @@ const MainLayout = () => {
               <Route path="/customers" element={<CustomerList />} />
               <Route path="/purchase-orders" element={<PurchaseOrderList />} />
               <Route path="/sale-orders" element={<SaleOrderList />} />
+              <Route path="/finance-report" element={<FinanceReport />} /> {/* 💡 註冊財務報表路由 */}
               <Route path="/backup" element={<BackupRestore />} />
             </Routes>
           </div>

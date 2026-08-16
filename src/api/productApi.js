@@ -43,4 +43,6 @@ export const productApi = {
       },
     });
   },
+  // 💡 8. 新增：取得該商品的進銷歷史紀錄 (進貨廠商/日期/單價/數量 + 銷貨客戶/日期/單價/數量)
+  getProductHistory: (id) => axiosInstance.get(`/products/${id}/history`),
 };
