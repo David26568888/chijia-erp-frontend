@@ -1,11 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { 
   Table, Button, Space, Modal, Form, Select, 
-  Input, InputNumber, DatePicker, Tag, message, Card, Typography, Divider, Row, Col, Popconfirm, Tabs
+  Input, InputNumber, DatePicker, Tag, message, Card, Typography, Divider, Row, Col, Popconfirm, Spin 
 } from 'antd';
 import { 
   PlusOutlined, ReloadOutlined, MinusCircleOutlined, EyeOutlined, 
-  ShoppingCartOutlined, DollarOutlined, SearchOutlined, EditOutlined, DeleteOutlined, CopyOutlined, HistoryOutlined
+  ShoppingCartOutlined, DollarOutlined, SearchOutlined, EditOutlined, DeleteOutlined, CopyOutlined, HistoryOutlined 
 } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import { saleApi } from '../api/saleApi';
@@ -25,19 +25,22 @@ const SaleOrderList = () => {
   const [searchKeyword, setSearchKeyword] = useState('');
   const [dateRange, setDateRange] = useState(null);
 
-  // Modal 狀態
+  // POS / 修改 Modal 狀態
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
   const [editingId, setEditingId] = useState(null);
   const [selectedOrder, setSelectedOrder] = useState(null);
 
-  const [form] = Form.useForm();
-
-  // 商品歷史紀錄子彈窗狀態
+  // 💡 1. 行情速查 Modal 狀態管理
   const [historyModalOpen, setHistoryModalOpen] = useState(false);
   const [historyLoading, setHistoryLoading] = useState(false);
-  const [selectedProductName, setSelectedProductName] = useState('');
-  const [historyData, setHistoryData] = useState({ purchaseHistory: [], saleHistory: [] });
+  const [selectedHistoryProduct, setSelectedHistoryProduct] = useState({ id: null, name: '' });
+  const [productHistoryData, setProductHistoryData] = useState({ saleHistory: [], purchaseHistory: [] });
+
+  const [form] = Form.useForm();
+
+  // 💡 宣告 Ref 陣列，儲存每一列商品 Select 的元件實體
+  const selectRefs = React.useRef([]);
 
   // 1. 讀取銷貨單列表
   const fetchOrders = async () => {
@@ -86,57 +89,51 @@ const SaleOrderList = () => {
     fetchOptions();
   }, []);
 
+  // 💡 2. 開啟行情速查 Modal 並載入後端 API
+  const handleOpenHistory = async (productId) => {
+    if (!productId) {
+      message.warning('請先選擇商品！');
+      return;
+    }
+    const product = products.find(p => p.id === productId);
+    setSelectedHistoryProduct({
+      id: productId,
+      name: product ? product.productName : '未知商品'
+    });
+    setHistoryModalOpen(true);
+    setHistoryLoading(true);
+
+    try {
+      // 呼叫後端行情 API
+      const res = await productApi.getProductHistory(productId);
+      setProductHistoryData(res?.data || res || { saleHistory: [], purchaseHistory: [] });
+    } catch (err) {
+      message.error('讀取行情歷史失敗：' + (err.message || '網路錯誤'));
+    } finally {
+      setHistoryLoading(false);
+    }
+  };
+
   // 3. 打開「新增」銷貨單彈窗
   const openCreateModal = () => {
     setEditingId(null);
-    setIsModalOpen(true);
+    form.resetFields();
 
-    setTimeout(() => {
-      form.resetFields();
+    // 💡 尋找 customerCode 為 "*" 的散客/現金客戶，找不到則預設取第一筆
+    const defaultCustomer = customers.find(c => c.customerCode === '*') || customers[0];
+    const defaultCustomerId = defaultCustomer ? defaultCustomer.id : undefined;
       form.setFieldsValue({
-        saleDate: dayjs(),
-        customerId: undefined, // 預設 undefined 讓使用者自由選擇或留空當作門市散客
-        discountAmount: 0,
-        items: [{}],
-      });
-    }, 0);
+      saleDate: dayjs(),
+      customerId: defaultCustomerId, // 💡 自動預設帶入現金客戶 "*"
+      discountAmount: 0,
+      items: [{}],
+    });
+    setIsModalOpen(true);
   };
 
   // 4. 打開「修改」銷貨單彈窗
   const openEditModal = async (record) => {
     setEditingId(record.id);
-    setIsModalOpen(true);
-
-    try {
-      const res = await saleApi.getSaleOrderById(record.id);
-      const data = res?.data || res;
-      
-      setTimeout(() => {
-        form.setFieldsValue({
-          customerId: data.customerId || undefined,
-          saleDate: data.saleDate ? dayjs(data.saleDate) : dayjs(),
-          remark: data.remark || '',
-          discountAmount: data.discountAmount || 0,
-          items: (data.items || []).map((item) => {
-            const matchedProd = products.find((p) => p.id === item.productId);
-            return {
-              productId: item.productId,
-              unitPrice: item.unitPrice,
-              quantity: item.quantity,
-              stockQuantity: matchedProd ? matchedProd.stockQuantity : '-',
-              unit: matchedProd ? matchedProd.unit : '個',
-            };
-          }),
-        });
-      }, 0);
-    } catch (err) {
-      message.error('讀取單據失敗：' + (err.message || '連線錯誤'));
-    }
-  };
-
-  // 💡 5. 核心亮點：【複製訂單】功能
-  const handleCopyOrder = async (record) => {
-    setEditingId(null); // 確保是【新增】模式，送出後會寫入全新銷貨單
     form.resetFields();
     try {
       const res = await saleApi.getSaleOrderById(record.id);
@@ -144,7 +141,37 @@ const SaleOrderList = () => {
       
       form.setFieldsValue({
         customerId: data.customerId,
-        saleDate: dayjs(), // 自動將銷貨日期預設為【今天】
+        saleDate: data.saleDate ? dayjs(data.saleDate) : dayjs(),
+        remark: data.remark || '',
+        discountAmount: data.discountAmount || 0,
+        items: (data.items || []).map(item => {
+          const matchedProd = products.find(p => p.id === item.productId);
+          return {
+            productId: item.productId,
+            unitPrice: item.unitPrice,
+            quantity: item.quantity,
+            stockQuantity: matchedProd ? matchedProd.stockQuantity : '-',
+            unit: matchedProd ? matchedProd.unit : '個',
+          };
+        }),
+      });
+      setIsModalOpen(true);
+    } catch (err) {
+      message.error('讀取單據失敗：' + (err.message || '連線錯誤'));
+    }
+  };
+
+  // 5. 【複製訂單】功能
+  const handleCopyOrder = async (record) => {
+    setEditingId(null);
+    form.resetFields();
+    try {
+      const res = await saleApi.getSaleOrderById(record.id);
+      const data = res?.data || res;
+      
+      form.setFieldsValue({
+        customerId: data.customerId,
+        saleDate: dayjs(),
         remark: `複製自單號 ${data.saleNo || ''}${data.remark ? ' (' + data.remark + ')' : ''}`,
         discountAmount: data.discountAmount || 0,
         items: (data.items || []).map(item => {
@@ -165,44 +192,82 @@ const SaleOrderList = () => {
     }
   };
 
-  // 6. 選商品自動帶入單價與當前庫存
-  const handleProductSelect = (productId, fieldIndex) => {
+  // 6. 選商品時向後端查詢歷史成交價/建議售價
+  const handleProductSelect = async (productId, fieldIndex) => {
     const product = products.find((p) => p.id === productId);
-    if (product) {
-      if ((product.stockQuantity || 0) <= 0) {
-        message.warning(`⚠️ 警告：商品 [${product.productName}] 當前庫存不足！`);
-      }
-      const items = form.getFieldValue('items') || [];
-      items[fieldIndex] = {
-        ...items[fieldIndex],
-        productId: product.id,
-        unitPrice: product.salePrice || 0,
-        quantity: 1,
-        stockQuantity: product.stockQuantity || 0,
-        unit: product.unit || '個',
-      };
-      form.setFieldsValue({ items: [...items] });
+    if (!product) return;
+
+    if ((product.stockQuantity || 0) <= 0) {
+      message.warning(`⚠️ 警告：商品 [${product.productName}] 當前庫存不足！`);
     }
+
+    const currentCustomerId = form.getFieldValue('customerId');
+    let suggestedPrice = product.salePrice || 0;
+
+    try {
+      const res = await saleApi.getSuggestedPrice(currentCustomerId, productId);
+      const fetchedPrice = res?.data ?? res;
+      if (fetchedPrice !== undefined && fetchedPrice !== null) {
+        suggestedPrice = fetchedPrice;
+      }
+    } catch (err) {
+      console.warn('無法取得建議售價，自動套用商品預設售價', err);
+    }
+
+    const items = form.getFieldValue('items') || [];
+    items[fieldIndex] = {
+      ...items[fieldIndex],
+      productId: product.id,
+      unitPrice: suggestedPrice,
+      quantity: 1,
+      stockQuantity: product.stockQuantity || 0,
+      unit: product.unit || '個',
+    };
+
+    // 💡 關鍵優化：如果當前填寫的是最後一列，自動向下擴充新增一列空白項目！
+    if (fieldIndex === items.length - 1) {
+      items.push({});
+    
+    // 💡 關鍵優化 ：等待 DOM 渲染完畢後，自動將焦點（Focus）移至下一行的商品選單
+      setTimeout(() => {
+        if (selectRefs.current[fieldIndex + 1]) {
+          selectRefs.current[fieldIndex + 1].focus();
+        }
+      }, 50);
+    }
+
+    form.setFieldsValue({ items: [...items] });
   };
 
-  // 7. 提交 (新增/複製單據 或 修改單據)
+  // 7. 提交銷貨單
   const handleSubmit = async (values) => {
     try {
       const rawItems = values.items || [];
-      // 過濾掉未選擇商品的空白列
-      const validItems = rawItems.filter((i) => i && i.productId);
 
-      if (validItems.length === 0) {
-        message.error('請至少選擇一項有效的銷售商品！');
+      // 💡 1. 自動過濾掉未選擇商品的空白列 (包含最後一行空白)
+      const items = rawItems.filter((item) => item && item.productId);
+
+      // 💡 2. 檢查是否至少有一項有效商品
+      if (items.length === 0) {
+        message.error('請至少選擇一項銷售商品！');
+        return;
+      }
+
+      // 💡 3. 檢查有效商品是否有未填寫單價或數量的情況
+      const hasInvalidItem = items.some(item => 
+        item.unitPrice === undefined || item.unitPrice === null || !item.quantity
+      );
+      if (hasInvalidItem) {
+        message.error('請確認已選擇商品的單價與數量！');
         return;
       }
 
       const payload = {
-        customerId: values.customerId || null,
+        customerId: values.customerId,
         saleDate: values.saleDate ? values.saleDate.format('YYYY-MM-DD') : dayjs().format('YYYY-MM-DD'),
         remark: values.remark || '',
         discountAmount: values.discountAmount || 0,
-        items: validItems.map((item) => ({
+        items: items.map((item) => ({
           productId: item.productId,
           quantity: item.quantity,
           unitPrice: item.unitPrice,
@@ -221,11 +286,11 @@ const SaleOrderList = () => {
       fetchOrders();
       fetchOptions();
     } catch (err) {
-      message.error('儲存失敗：' + (err.response?.data?.message || err.message || '連線錯誤'));
+      message.error('儲存失敗：' + (err.message || '連線錯誤'));
     }
   };
 
-  // 9. 作廢/刪除銷貨單[cite: 6]
+  // 8. 作廢/刪除銷貨單
   const handleDelete = async (id) => {
     try {
       await saleApi.deleteSaleOrder(id);
@@ -237,7 +302,7 @@ const SaleOrderList = () => {
     }
   };
 
-  // 10. 檢視明細[cite: 6]
+  // 9. 檢視明細
   const handleViewDetail = async (id) => {
     try {
       const res = await saleApi.getSaleOrderById(id);
@@ -248,7 +313,7 @@ const SaleOrderList = () => {
     }
   };
 
-  // 表格欄位定義 (包含「複製」操作按鈕)
+  // 表格欄位定義
   const columns = [
     {
       title: '銷貨單號',
@@ -267,13 +332,13 @@ const SaleOrderList = () => {
       title: '購買客戶',
       dataIndex: 'customerName',
       key: 'customerName',
-      render: (text) => <Tag color={text ? 'blue' : 'green'}>{text || '門市散客'}</Tag>,
+      render: (text) => <Tag color="green">{text || '門市散客'}</Tag>,
     },
     {
       title: '整單折讓',
       dataIndex: 'discountAmount',
       key: 'discountAmount',
-      width: 100,
+      width: 90,
       align: 'right',
       render: (val) => val ? <span style={{ color: '#d97706' }}>-${val}</span> : '-',
     },
@@ -281,7 +346,7 @@ const SaleOrderList = () => {
       title: '實收總金額 (NT$)',
       dataIndex: 'totalAmount',
       key: 'totalAmount',
-      width: 150,
+      width: 140,
       align: 'right',
       render: (amount) => (
         <span style={{ color: '#3f8600', fontWeight: 'bold', fontSize: '15px' }}>
@@ -370,31 +435,19 @@ const SaleOrderList = () => {
         onCancel={() => setIsModalOpen(false)}
         okText={editingId ? '儲存修改' : '完成結帳並扣庫存'}
         cancelText="取消"
-        width={920}
-        destroyOnClose
+        width={960}
+        destroyOnHidden
       >
         <Form form={form} layout="vertical" onFinish={handleSubmit}>
           <Row gutter={16}>
             <Col span={12}>
-              <Form.Item
-               name="customerId" 
-              label="選擇購買客戶 (留空為散客)">
-                  <Select
-                  placeholder="選擇客戶 (預設散客)..." 
-                  showSearch 
-                  allowClear
-                  optionFilterProp="children"
-                  onChange={handleCustomerChange}
-                >
-                  {customers.map((c) => {
-                    // 💡 兼顧 c.id 與 c.customerId，避免 undefined
-                    const custId = c.id ?? c.customerId;
-                    return (
-                      <Select.Option key={custId} value={custId}>
-                        [{c.customerCode || '客戶'}] {c.shortName || c.fullName || '未命名'}
-                      </Select.Option>
-                    );
-                  })}
+              <Form.Item name="customerId" label="選擇購買客戶" rules={[{ required: true, message: '請選擇客戶' }]}>
+                <Select placeholder="選擇客戶 (預設散客)..." showSearch optionFilterProp="children">
+                  {customers.map((c) => (
+                    <Select.Option key={c.id} value={c.id}>
+                      [{c.customerCode}] {c.shortName || c.fullName}
+                    </Select.Option>
+                  ))}
                 </Select>
               </Form.Item>
             </Col>
@@ -434,18 +487,18 @@ const SaleOrderList = () => {
                           const unitStr = currentItem.unit || '';
 
                           return (
-                            /* 💡 修正 Col 寬度總和為 24： 7 + 2 + 3 + 4 + 3 + 4 + 1 = 24 */
                             <Row key={key} gutter={8} align="middle" style={{ marginBottom: 10, background: '#fafafa', padding: '8px 4px', borderRadius: 6 }}>
-                              <Col span={7}>
+                              <Col span={8}>
                                 <Form.Item
                                   {...restField}
                                   name={[name, 'productId']}
                                   label={index === 0 ? '商品品名規格 (條碼/關鍵字)' : ''}
-                                  rules={[{ required: true, message: '請選擇商品' }]}
+                                  /*💡 移除 rules={[{ required: true, message: '請選擇商品' }]} 避免空白列被阻擋 */
                                   style={{ marginBottom: 0 }}
                                 >
                                   <Select
-                                    placeholder="搜尋品名或編號..."
+                                    ref={(el) => (selectRefs.current[index] = el)} // 💡 將選單實體登記到 Ref 陣列
+                                    placeholder="搜尋品名、條碼或編號..."
                                     showSearch
                                     optionFilterProp="children"
                                     onChange={(val) => handleProductSelect(val, index)}
@@ -458,23 +511,23 @@ const SaleOrderList = () => {
                                   </Select>
                                 </Form.Item>
                               </Col>
-                              
-                              <Col span={2} style={{ textAlign: 'center' }}>
-                                {index === 0 && <div style={{ fontSize: '12px', color: '#8c8c8c', marginBottom: 4 }}>歷程</div>}
+
+                              {/* 💡 查行情按鈕 */}
+                              <Col span={3} style={{ textAlign: 'center' }}>
+                                {index === 0 && <div style={{ fontSize: '12px', color: '#8c8c8c', marginBottom: 4 }}>歷史行情</div>}
                                 <Button 
-                                  type="link" 
-                                  icon={<HistoryOutlined />} 
-                                  style={{ padding: '0 2px' }}
-                                  onClick={() => handleOpenHistoryModal(currentItem.productId)}
-                                  title="查看歷史進貨與銷貨紀錄"
+                                  size="small" 
+                                  type="dashed" 
+                                  icon={<HistoryOutlined />}
+                                  onClick={() => handleOpenHistory(currentItem.productId)}
                                 >
-                                  歷程
+                                  查行情
                                 </Button>
                               </Col>
 
                               <Col span={3} style={{ textAlign: 'center' }}>
                                 {index === 0 && <div style={{ fontSize: '12px', color: '#8c8c8c', marginBottom: 4 }}>當前庫存</div>}
-                                {currentStock !== null && currentStock !== '-' ? (
+                                {currentStock !== null ? (
                                   <Tag color={currentStock <= 0 ? 'error' : 'processing'}>
                                     {currentStock} {unitStr}
                                   </Tag>
@@ -483,12 +536,12 @@ const SaleOrderList = () => {
                                 )}
                               </Col>
 
-                              <Col span={4}>
+                              <Col span={3}>
                                 <Form.Item
                                   {...restField}
                                   name={[name, 'unitPrice']}
                                   label={index === 0 ? '售價 (NT$)' : ''}
-                                  rules={[{ required: true, message: '單價' }]}
+                                  /* 💡 移除 rules={[{ required: true, message: '單價' }]}*/
                                   style={{ marginBottom: 0 }}
                                 >
                                   <InputNumber min={0} style={{ width: '100%' }} />
@@ -500,14 +553,14 @@ const SaleOrderList = () => {
                                   {...restField}
                                   name={[name, 'quantity']}
                                   label={index === 0 ? '數量' : ''}
-                                  rules={[{ required: true, message: '數量' }]}
+                                 /* 💡 移除 rules={[{ required: true, message: '數量' }]} */
                                   style={{ marginBottom: 0 }}
                                 >
-                                  <InputNumber min={0.01} style={{ width: '100%' }} />
+                                  <InputNumber min={1} style={{ width: '100%' }} />
                                 </Form.Item>
                               </Col>
 
-                              <Col span={4} style={{ textAlign: 'right' }}>
+                              <Col span={3} style={{ textAlign: 'right' }}>
                                 {index === 0 && <div style={{ fontSize: '12px', color: '#8c8c8c', marginBottom: 4 }}>項目小計</div>}
                                 <Text strong style={{ color: '#1677ff', fontSize: '14px' }}>
                                   ${lineSubtotal.toLocaleString()}
@@ -515,10 +568,7 @@ const SaleOrderList = () => {
                               </Col>
 
                               <Col span={1} style={{ textAlign: 'center' }}>
-                                <MinusCircleOutlined 
-                                  onClick={() => remove(name)} 
-                                  style={{ color: 'red', cursor: 'pointer', fontSize: '16px' }} 
-                                />
+                                <MinusCircleOutlined onClick={() => remove(name)} style={{ color: 'red', cursor: 'pointer', marginTop: index === 0 ? 22 : 0 }} />
                               </Col>
                             </Row>
                           );
@@ -573,6 +623,62 @@ const SaleOrderList = () => {
         </Form>
       </Modal>
 
+      {/* 💡 3. 商品進銷歷史行情 Modal (Ant Design 獨立彈窗) */}
+      <Modal
+        title={`📊 商品進銷歷史行情 - 【${selectedHistoryProduct.name}】`}
+        open={historyModalOpen}
+        onCancel={() => setHistoryModalOpen(false)}
+        footer={[
+          <Button key="close" type="primary" onClick={() => setHistoryModalOpen(false)}>
+            關閉
+          </Button>
+        ]}
+        width={750}
+        zIndex={1050} /* 確保覆蓋在開單視窗 (zIndex 1000) 上層 */
+      >
+        <Spin spinning={historyLoading}>
+          <Row gutter={16}>
+            {/* 近期銷售紀錄 */}
+            <Col span={12}>
+              <Card title="🛒 近期銷售紀錄 (售價參考)" size="small" style={{ height: '100%' }}>
+                <Table
+                  dataSource={productHistoryData.saleHistory || []}
+                  rowKey={(r, idx) => 'sale-' + idx}
+                  pagination={false}
+                  size="small"
+                  columns={[
+                    { title: '日期', dataIndex: 'saleDate', key: 'saleDate', width: 95 },
+                    { title: '客戶', dataIndex: 'customerName', key: 'customerName' },
+                    { title: '單價', dataIndex: 'unitPrice', key: 'unitPrice', align: 'right', render: (v) => <span style={{ color: '#1677ff', fontWeight: 'bold' }}>${v}</span> },
+                    { title: '數量', dataIndex: 'quantity', key: 'quantity', align: 'right', width: 60 },
+                  ]}
+                  locale={{ emptyText: '尚無銷售紀錄' }}
+                />
+              </Card>
+            </Col>
+
+            {/* 近期進貨紀錄 */}
+            <Col span={12}>
+              <Card title="📦 近期進貨紀錄 (成本參考)" size="small" style={{ height: '100%' }}>
+                <Table
+                  dataSource={productHistoryData.purchaseHistory || []}
+                  rowKey={(r, idx) => 'pur-' + idx}
+                  pagination={false}
+                  size="small"
+                  columns={[
+                    { title: '日期', dataIndex: 'purchaseDate', key: 'purchaseDate', width: 95 },
+                    { title: '廠商', dataIndex: 'supplierName', key: 'supplierName' },
+                    { title: '進價', dataIndex: 'unitPrice', key: 'unitPrice', align: 'right', render: (v) => <span style={{ color: '#cf1322', fontWeight: 'bold' }}>${v}</span> },
+                    { title: '數量', dataIndex: 'quantity', key: 'quantity', align: 'right', width: 60 },
+                  ]}
+                  locale={{ emptyText: '尚無進貨紀錄' }}
+                />
+              </Card>
+            </Col>
+          </Row>
+        </Spin>
+      </Modal>
+
       {/* 檢視明細 Modal */}
       <Modal
         title={`📄 銷貨單明細 - ${selectedOrder?.saleNo || ''}`}
@@ -609,64 +715,6 @@ const SaleOrderList = () => {
             />
           </div>
         )}
-      </Modal>
-
-      {/* 商品進銷歷史紀錄子彈窗 (Modal in Modal) */}
-      <Modal
-        title={`📊 [${selectedProductName}] - 歷史進銷貨明細紀錄`}
-        open={historyModalOpen}
-        onCancel={() => setHistoryModalOpen(false)}
-        footer={[
-          <Button key="close" onClick={() => setHistoryModalOpen(false)}>
-            關閉
-          </Button>
-        ]}
-        width={750}
-        style={{ top: 40 }}
-      >
-        <Tabs 
-          defaultActiveKey="purchase"
-          items={[
-            {
-              key: 'purchase',
-              label: '📦 進貨歷史紀錄',
-              children: (
-                <Table
-                  dataSource={historyData.purchaseHistory || []}
-                  rowKey={(rec, idx) => `p-${idx}`}
-                  loading={historyLoading}
-                  pagination={{ pageSize: 5 }}
-                  size="small"
-                  columns={[
-                    { title: '進貨廠商', dataIndex: 'supplierName', key: 'supplierName', render: (t) => <Tag color="blue">{t || '門市進貨'}</Tag> },
-                    { title: '進貨日期', dataIndex: 'purchaseDate', key: 'purchaseDate', width: 120 },
-                    { title: '進貨單價 (NT$)', dataIndex: 'unitPrice', key: 'unitPrice', align: 'right', render: (v) => `$${v ?? 0}` },
-                    { title: '數量', dataIndex: 'quantity', key: 'quantity', align: 'right', render: (v) => <strong>{v}</strong> },
-                  ]}
-                />
-              ),
-            },
-            {
-              key: 'sale',
-              label: '🛒 銷售歷史紀錄',
-              children: (
-                <Table
-                  dataSource={historyData.saleHistory || []}
-                  rowKey={(rec, idx) => `s-${idx}`}
-                  loading={historyLoading}
-                  pagination={{ pageSize: 5 }}
-                  size="small"
-                  columns={[
-                    { title: '銷售客戶', dataIndex: 'customerName', key: 'customerName', render: (t) => <Tag color="green">{t || '門市散客'}</Tag> },
-                    { title: '銷貨日期', dataIndex: 'saleDate', key: 'saleDate', width: 120 },
-                    { title: '銷貨單價 (NT$)', dataIndex: 'unitPrice', key: 'unitPrice', align: 'right', render: (v) => `$${v ?? 0}` },
-                    { title: '數量', dataIndex: 'quantity', key: 'quantity', align: 'right', render: (v) => <strong>{v}</strong> },
-                  ]}
-                />
-              ),
-            },
-          ]}
-        />
       </Modal>
     </Card>
   );
