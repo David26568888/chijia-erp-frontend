@@ -25,4 +25,8 @@ export const saleApi = {
   deleteSaleOrder: (id) => {
     return axiosInstance.delete(`/sale-orders/${id}`);
   },
+
+  // 💡 新增：查詢客戶與商品的歷史建議售價[cite: 4]
+  getSuggestedPrice: (customerId, productId) => 
+    axiosInstance.get('/sale-orders/suggest-price', { params: { customerId, productId } }),
 };

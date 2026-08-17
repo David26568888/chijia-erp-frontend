@@ -355,7 +355,7 @@ const PurchaseOrderList = () => {
         okText={editingId ? '儲存修改' : '完成進貨並加庫存'}
         cancelText="取消"
         width={920}
-        destroyOnClose
+        destroyOnHidden
       >
         <Form form={form} layout="vertical" onFinish={handleSubmit}>
           <Row gutter={16}>
