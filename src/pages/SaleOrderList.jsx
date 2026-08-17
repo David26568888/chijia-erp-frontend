@@ -25,7 +25,7 @@ const SaleOrderList = () => {
   const [searchKeyword, setSearchKeyword] = useState('');
   const [dateRange, setDateRange] = useState(null);
 
-  // Modal 狀態 (editingId 為 null 代表新增/複製模式，有值代表修改模式)
+  // Modal 狀態
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
   const [editingId, setEditingId] = useState(null);
@@ -124,9 +124,9 @@ const SaleOrderList = () => {
     }
   };
 
-  // 💡 5. 核心亮點：【複製訂單】功能
+  // 5. 【複製訂單】功能
   const handleCopyOrder = async (record) => {
-    setEditingId(null); // 確保是【新增】模式，送出後會寫入全新銷貨單
+    setEditingId(null);
     form.resetFields();
     try {
       const res = await saleApi.getSaleOrderById(record.id);
@@ -134,7 +134,7 @@ const SaleOrderList = () => {
       
       form.setFieldsValue({
         customerId: data.customerId,
-        saleDate: dayjs(), // 自動將銷貨日期預設為【今天】
+        saleDate: dayjs(),
         remark: `複製自單號 ${data.saleNo || ''}${data.remark ? ' (' + data.remark + ')' : ''}`,
         discountAmount: data.discountAmount || 0,
         items: (data.items || []).map(item => {
@@ -155,24 +155,43 @@ const SaleOrderList = () => {
     }
   };
 
-  // 6. 選商品自動帶入單價與當前庫存
-  const handleProductSelect = (productId, fieldIndex) => {
+  // 💡 6. 【關鍵修正】：選商品時向後端查詢該客戶歷史成交價/建議售價！
+  const handleProductSelect = async (productId, fieldIndex) => {
     const product = products.find((p) => p.id === productId);
-    if (product) {
-      if ((product.stockQuantity || 0) <= 0) {
-        message.warning(`⚠️ 警告：商品 [${product.productName}] 當前庫存不足！`);
-      }
-      const items = form.getFieldValue('items') || [];
-      items[fieldIndex] = {
-        ...items[fieldIndex],
-        productId: product.id,
-        unitPrice: product.salePrice || 0,
-        quantity: 1,
-        stockQuantity: product.stockQuantity || 0,
-        unit: product.unit || '個',
-      };
-      form.setFieldsValue({ items: [...items] });
+    if (!product) return;
+
+    if ((product.stockQuantity || 0) <= 0) {
+      message.warning(`⚠️ 警告：商品 [${product.productName}] 當前庫存不足！`);
     }
+
+    // 取得目前選擇的客戶 ID
+    const currentCustomerId = form.getFieldValue('customerId');
+    
+    // 預設售價先採用商品定價
+    let suggestedPrice = product.salePrice || 0;
+
+    // 呼叫後端 API 取得該客戶上次成交價（若有的話）
+    try {
+      const res = await saleApi.getSuggestedPrice(currentCustomerId, productId);
+      const fetchedPrice = res?.data ?? res;
+      if (fetchedPrice !== undefined && fetchedPrice !== null) {
+        suggestedPrice = fetchedPrice;
+      }
+    } catch (err) {
+      console.warn('無法取得建議售價，自動套用商品預設售價', err);
+    }
+
+    const items = form.getFieldValue('items') || [];
+    items[fieldIndex] = {
+      ...items[fieldIndex],
+      productId: product.id,
+      unitPrice: suggestedPrice, // 👈 帶入歷史成交價或預設售價
+      quantity: 1,
+      stockQuantity: product.stockQuantity || 0,
+      unit: product.unit || '個',
+    };
+
+    form.setFieldsValue({ items: [...items] });
   };
 
   // 7. 提交 (新增/複製單據 或 修改單據)
@@ -206,7 +225,7 @@ const SaleOrderList = () => {
 
       setIsModalOpen(false);
       fetchOrders();
-      fetchOptions(); // 重新整理商品最新庫存
+      fetchOptions();
     } catch (err) {
       message.error('儲存失敗：' + (err.message || '連線錯誤'));
     }
@@ -235,7 +254,7 @@ const SaleOrderList = () => {
     }
   };
 
-  // 表格欄位定義 (包含「複製」操作按鈕)
+  // 表格欄位定義
   const columns = [
     {
       title: '銷貨單號',
@@ -289,12 +308,9 @@ const SaleOrderList = () => {
           <Button type="text" style={{ color: '#1677ff' }} icon={<EditOutlined />} onClick={() => openEditModal(record)}>
             修改
           </Button>
-
-          {/* 💡 複製按鈕 */}
           <Button type="text" style={{ color: '#52c41a' }} icon={<CopyOutlined />} onClick={() => handleCopyOrder(record)}>
             複製
           </Button>
-
           <Popconfirm
             title="確定要作廢此銷貨單嗎？"
             description="作廢後將自動將商品庫存 100% 回補！"
@@ -361,7 +377,7 @@ const SaleOrderList = () => {
         okText={editingId ? '儲存修改' : '完成結帳並扣庫存'}
         cancelText="取消"
         width={920}
-        destroyOnClose
+        destroyOnHidden  /* 💡 修正警告：改用 destroyOnHidden */
       >
         <Form form={form} layout="vertical" onFinish={handleSubmit}>
           <Row gutter={16}>
